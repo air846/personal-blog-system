@@ -1,178 +1,217 @@
 package com.blog.service.impl;
 
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.blog.entity.Article;
 import com.blog.mapper.ArticleMapper;
 import com.blog.service.ArticleService;
-import com.blog.util.Result;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
+/**
+ * 文章Service实现类
+ * 
+ * @author blog
+ */
+@Slf4j
 @Service
-@Transactional
-public class ArticleServiceImpl implements ArticleService {
-
-    @Autowired
-    private ArticleMapper articleMapper;
+@RequiredArgsConstructor
+public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
 
     @Override
-    public Result getArticleList(int page, int size, Long categoryId) {
-        int offset = (page - 1) * size;
-        List<Article> articles = articleMapper.findPublishedArticles(offset, size, categoryId);
-        int total = articleMapper.countPublishedArticles(categoryId);
+    public IPage<Article> getArticlePage(Integer page, Integer size, Long categoryId, String status, String keyword) {
+        Page<Article> pageParam = new Page<>(page, size);
         
-        Map<String, Object> data = new HashMap<>();
-        data.put("records", articles);
-        data.put("total", total);
-        data.put("page", page);
-        data.put("size", size);
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
         
-        return Result.success(data);
+        // 分类过滤
+        if (categoryId != null) {
+            wrapper.eq(Article::getCategoryId, categoryId);
+        }
+        
+        // 状态过滤
+        if (StrUtil.isNotBlank(status)) {
+            wrapper.eq(Article::getStatus, status);
+        }
+        
+        // 关键词搜索
+        if (StrUtil.isNotBlank(keyword)) {
+            wrapper.and(w -> w.like(Article::getTitle, keyword)
+                    .or()
+                    .like(Article::getSummary, keyword));
+        }
+        
+        // 排序：置顶 -> 发布时间 -> 创建时间
+        wrapper.orderByDesc(Article::getIsTop)
+               .orderByDesc(Article::getPublishTime)
+               .orderByDesc(Article::getCreateTime);
+        
+        return page(pageParam, wrapper);
     }
 
     @Override
-    public Result getArticleDetail(Long id) {
-        Article article = articleMapper.findById(id);
-        if (article == null || article.getStatus() != 1) {
-            return Result.error("文章不存在");
+    public Article getArticleDetail(Long id) {
+        Article article = getById(id);
+        if (article == null) {
+            throw new RuntimeException("文章不存在");
         }
         
         // 增加阅读量
-        articleMapper.incrementViewCount(id);
-        article.setViewCount(article.getViewCount() + 1);
+        incrementViewCount(id);
         
-        return Result.success(article);
+        return article;
     }
 
     @Override
-    public Result createArticle(Article article) {
-        article.setCreateTime(LocalDateTime.now());
-        article.setUpdateTime(LocalDateTime.now());
-        article.setViewCount(0);
-        article.setLikeCount(0);
-        article.setCommentCount(0);
-        article.setIsTop(0);
-        article.setIsRecommend(0);
-        
-        if (article.getStatus() == 1) {
-            article.setPublishTime(LocalDateTime.now());
+    @Transactional(rollbackFor = Exception.class)
+    public void createArticle(Article article, List<Long> tagIds) {
+        // 设置默认值
+        if (article.getViewCount() == null) {
+            article.setViewCount(0L);
+        }
+        if (article.getLikeCount() == null) {
+            article.setLikeCount(0L);
+        }
+        if (article.getCommentCount() == null) {
+            article.setCommentCount(0L);
+        }
+        if (article.getIsTop() == null) {
+            article.setIsTop(0);
+        }
+        if (article.getIsRecommend() == null) {
+            article.setIsRecommend(0);
         }
         
-        articleMapper.insert(article);
-        return Result.success("创建成功");
+        // 保存文章
+        save(article);
+        
+        // TODO: 保存文章标签关联关系
+        // 这里需要实现文章标签关联的保存逻辑
+        
+        log.info("文章创建成功：{}", article.getTitle());
     }
 
     @Override
-    public Result updateArticle(Long id, Article article) {
-        Article existingArticle = articleMapper.findById(id);
+    @Transactional(rollbackFor = Exception.class)
+    public void updateArticle(Article article, List<Long> tagIds) {
+        Article existingArticle = getById(article.getId());
         if (existingArticle == null) {
-            return Result.error("文章不存在");
+            throw new RuntimeException("文章不存在");
         }
         
-        article.setId(id);
-        article.setUpdateTime(LocalDateTime.now());
+        // 更新文章
+        updateById(article);
         
-        // 如果从草稿变为发布状态，设置发布时间
-        if (existingArticle.getStatus() == 0 && article.getStatus() == 1) {
-            article.setPublishTime(LocalDateTime.now());
-        }
+        // TODO: 更新文章标签关联关系
         
-        articleMapper.update(article);
-        return Result.success("更新成功");
+        log.info("文章更新成功：{}", article.getTitle());
     }
 
     @Override
-    public Result deleteArticle(Long id) {
-        Article article = articleMapper.findById(id);
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteArticle(Long id) {
+        Article article = getById(id);
         if (article == null) {
-            return Result.error("文章不存在");
+            throw new RuntimeException("文章不存在");
         }
         
-        articleMapper.deleteById(id);
-        return Result.success("删除成功");
+        // 删除文章
+        removeById(id);
+        
+        // TODO: 删除文章标签关联关系
+        
+        log.info("文章删除成功：{}", article.getTitle());
     }
 
     @Override
-    public Result publishArticle(Long id) {
-        Article article = articleMapper.findById(id);
+    @Transactional(rollbackFor = Exception.class)
+    public void publishArticle(Long id) {
+        Article article = getById(id);
         if (article == null) {
-            return Result.error("文章不存在");
+            throw new RuntimeException("文章不存在");
         }
         
-        article.setStatus(1);
+        article.setStatus("PUBLISHED");
         article.setPublishTime(LocalDateTime.now());
-        article.setUpdateTime(LocalDateTime.now());
+        updateById(article);
         
-        articleMapper.update(article);
-        return Result.success("发布成功");
+        log.info("文章发布成功：{}", article.getTitle());
     }
 
     @Override
-    public Result likeArticle(Long id) {
-        Article article = articleMapper.findById(id);
-        if (article == null) {
-            return Result.error("文章不存在");
-        }
-        
-        articleMapper.incrementLikeCount(id);
-        return Result.success("点赞成功");
+    public void incrementViewCount(Long id) {
+        baseMapper.incrementViewCount(id);
     }
 
     @Override
-    public Result unlikeArticle(Long id) {
-        Article article = articleMapper.findById(id);
-        if (article == null) {
-            return Result.error("文章不存在");
-        }
+    @Transactional(rollbackFor = Exception.class)
+    public void likeArticle(Long articleId, Long userId) {
+        // TODO: 检查用户是否已经点赞
+        // 这里需要实现点赞逻辑，包括检查是否已点赞、增加点赞数等
         
-        articleMapper.decrementLikeCount(id);
-        return Result.success("取消点赞成功");
+        // 增加文章点赞数
+        baseMapper.incrementLikeCount(articleId);
+        
+        log.info("用户{}点赞文章{}", userId, articleId);
     }
 
     @Override
-    public Result getHotArticles(int limit) {
-        List<Article> articles = articleMapper.findHotArticles(limit);
-        return Result.success(articles);
+    @Transactional(rollbackFor = Exception.class)
+    public void unlikeArticle(Long articleId, Long userId) {
+        // TODO: 检查用户是否已经点赞
+        // 这里需要实现取消点赞逻辑
+        
+        // 减少文章点赞数
+        baseMapper.decrementLikeCount(articleId);
+        
+        log.info("用户{}取消点赞文章{}", userId, articleId);
     }
 
     @Override
-    public Result getRecommendArticles(int limit) {
-        List<Article> articles = articleMapper.findRecommendArticles(limit);
-        return Result.success(articles);
+    @Cacheable(value = "hotArticles", key = "#limit")
+    public List<Article> getHotArticles(Integer limit) {
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Article::getStatus, "PUBLISHED")
+               .orderByDesc(Article::getViewCount)
+               .last("LIMIT " + limit);
+        
+        return list(wrapper);
     }
 
     @Override
-    public Result searchArticles(String keyword, int page, int size) {
-        int offset = (page - 1) * size;
-        List<Article> articles = articleMapper.searchArticles(keyword, offset, size);
-        int total = articleMapper.countSearchArticles(keyword);
+    @Cacheable(value = "recommendArticles", key = "#limit")
+    public List<Article> getRecommendArticles(Integer limit) {
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Article::getStatus, "PUBLISHED")
+               .eq(Article::getIsRecommend, 1)
+               .orderByDesc(Article::getPublishTime)
+               .last("LIMIT " + limit);
         
-        Map<String, Object> data = new HashMap<>();
-        data.put("records", articles);
-        data.put("total", total);
-        data.put("page", page);
-        data.put("size", size);
-        
-        return Result.success(data);
+        return list(wrapper);
     }
 
     @Override
-    public Result getUserArticles(Long userId, int page, int size, Integer status) {
-        int offset = (page - 1) * size;
-        List<Article> articles = articleMapper.findUserArticles(userId, offset, size, status);
-        int total = articleMapper.countUserArticles(userId, status);
+    public IPage<Article> searchArticles(String keyword, Integer page, Integer size) {
+        Page<Article> pageParam = new Page<>(page, size);
         
-        Map<String, Object> data = new HashMap<>();
-        data.put("records", articles);
-        data.put("total", total);
-        data.put("page", page);
-        data.put("size", size);
+        LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Article::getStatus, "PUBLISHED")
+               .and(w -> w.like(Article::getTitle, keyword)
+                       .or()
+                       .like(Article::getSummary, keyword)
+                       .or()
+                       .like(Article::getContent, keyword))
+               .orderByDesc(Article::getPublishTime);
         
-        return Result.success(data);
+        return page(pageParam, wrapper);
     }
 }
