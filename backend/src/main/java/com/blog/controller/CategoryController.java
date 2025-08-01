@@ -36,4 +36,56 @@ public class CategoryController {
             return Result.error(e.getMessage());
         }
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "获取分类详情", description = "根据分类ID获取分类详情")
+    public Result<Category> getCategoryDetail(@PathVariable Long id) {
+        try {
+            Category category = categoryService.getById(id);
+            if (category == null) {
+                return Result.notFound("分类不存在");
+            }
+            return Result.success(category);
+        } catch (Exception e) {
+            log.error("获取分类详情失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping
+    @Operation(summary = "创建分类", description = "创建新分类，需要管理员权限")
+    public Result<Void> createCategory(@RequestBody Category category) {
+        try {
+            categoryService.save(category);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("创建分类失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "更新分类", description = "更新分类信息，需要管理员权限")
+    public Result<Void> updateCategory(@PathVariable Long id, @RequestBody Category category) {
+        try {
+            category.setId(id);
+            categoryService.updateById(category);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("更新分类失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "删除分类", description = "删除分类，需要管理员权限")
+    public Result<Void> deleteCategory(@PathVariable Long id) {
+        try {
+            categoryService.removeById(id);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("删除分类失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
 }

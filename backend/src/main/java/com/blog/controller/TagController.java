@@ -36,4 +36,56 @@ public class TagController {
             return Result.error(e.getMessage());
         }
     }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "获取标签详情", description = "根据标签ID获取标签详情")
+    public Result<Tag> getTagDetail(@PathVariable Long id) {
+        try {
+            Tag tag = tagService.getById(id);
+            if (tag == null) {
+                return Result.notFound("标签不存在");
+            }
+            return Result.success(tag);
+        } catch (Exception e) {
+            log.error("获取标签详情失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping
+    @Operation(summary = "创建标签", description = "创建新标签，需要管理员权限")
+    public Result<Void> createTag(@RequestBody Tag tag) {
+        try {
+            tagService.save(tag);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("创建标签失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "更新标签", description = "更新标签信息，需要管理员权限")
+    public Result<Void> updateTag(@PathVariable Long id, @RequestBody Tag tag) {
+        try {
+            tag.setId(id);
+            tagService.updateById(tag);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("更新标签失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "删除标签", description = "删除标签，需要管理员权限")
+    public Result<Void> deleteTag(@PathVariable Long id) {
+        try {
+            tagService.removeById(id);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("删除标签失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
 }

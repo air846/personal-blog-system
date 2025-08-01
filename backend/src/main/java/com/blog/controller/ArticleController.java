@@ -34,25 +34,22 @@ public class ArticleController {
     private final JwtUtil jwtUtil;
 
     @GetMapping("/list")
-    @Operation(summary = "获取文章列表", description = "分页查询文章列表，支持分类和关键词过滤")
+    @Operation(summary = "分页查询文章列表", description = "支持按分类、状态、关键词筛选")
     public Result<IPage<Article>> getArticleList(ArticleQueryRequest request) {
         try {
             IPage<Article> page = articleService.getArticlePage(
-                request.getPage(), 
-                request.getSize(), 
-                request.getCategoryId(), 
-                "PUBLISHED", // 只查询已发布的文章
-                request.getKeyword()
+                request.getPage(), request.getSize(), 
+                request.getCategoryId(), request.getStatus(), request.getKeyword()
             );
             return Result.success(page);
         } catch (Exception e) {
-            log.error("获取文章列表失败", e);
+            log.error("查询文章列表失败", e);
             return Result.error(e.getMessage());
         }
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "获取文章详情", description = "根据ID获取文章详情，会增加阅读量")
+    @Operation(summary = "获取文章详情", description = "根据文章ID获取文章详情，会自动增加阅读量")
     public Result<Article> getArticleDetail(@PathVariable Long id) {
         try {
             Article article = articleService.getArticleDetail(id);
@@ -64,9 +61,9 @@ public class ArticleController {
     }
 
     @PostMapping
-    @Operation(summary = "创建文章", description = "创建新文章")
+    @Operation(summary = "创建文章", description = "创建新文章，需要登录")
     public Result<Void> createArticle(@Valid @RequestBody ArticleRequest request, 
-                                     HttpServletRequest httpRequest) {
+                                    HttpServletRequest httpRequest) {
         try {
             Long userId = getUserIdFromRequest(httpRequest);
             if (userId == null) {
@@ -76,7 +73,7 @@ public class ArticleController {
             Article article = new Article();
             BeanUtils.copyProperties(request, article);
             article.setAuthorId(userId);
-            
+
             articleService.createArticle(article, request.getTagIds());
             return Result.success();
         } catch (Exception e) {
@@ -86,20 +83,29 @@ public class ArticleController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "更新文章", description = "更新文章内容")
+    @Operation(summary = "更新文章", description = "更新文章信息，需要登录且是文章作者")
     public Result<Void> updateArticle(@PathVariable Long id, 
-                                     @Valid @RequestBody ArticleRequest request,
-                                     HttpServletRequest httpRequest) {
+                                    @Valid @RequestBody ArticleRequest request,
+                                    HttpServletRequest httpRequest) {
         try {
             Long userId = getUserIdFromRequest(httpRequest);
             if (userId == null) {
                 return Result.unauthorized("未登录");
             }
 
+            // 检查文章是否存在且是否为作者
+            Article existingArticle = articleService.getById(id);
+            if (existingArticle == null) {
+                return Result.notFound("文章不存在");
+            }
+            if (!existingArticle.getAuthorId().equals(userId)) {
+                return Result.forbidden("无权限修改此文章");
+            }
+
             Article article = new Article();
             BeanUtils.copyProperties(request, article);
             article.setId(id);
-            
+
             articleService.updateArticle(article, request.getTagIds());
             return Result.success();
         } catch (Exception e) {
@@ -109,12 +115,22 @@ public class ArticleController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "删除文章", description = "删除指定文章")
-    public Result<Void> deleteArticle(@PathVariable Long id, HttpServletRequest request) {
+    @Operation(summary = "删除文章", description = "删除文章，需要登录且是文章作者")
+    public Result<Void> deleteArticle(@PathVariable Long id, 
+                                    HttpServletRequest httpRequest) {
         try {
-            Long userId = getUserIdFromRequest(request);
+            Long userId = getUserIdFromRequest(httpRequest);
             if (userId == null) {
                 return Result.unauthorized("未登录");
+            }
+
+            // 检查文章是否存在且是否为作者
+            Article existingArticle = articleService.getById(id);
+            if (existingArticle == null) {
+                return Result.notFound("文章不存在");
+            }
+            if (!existingArticle.getAuthorId().equals(userId)) {
+                return Result.forbidden("无权限删除此文章");
             }
 
             articleService.deleteArticle(id);
@@ -125,11 +141,39 @@ public class ArticleController {
         }
     }
 
-    @PostMapping("/{id}/like")
-    @Operation(summary = "点赞文章", description = "为文章点赞")
-    public Result<Void> likeArticle(@PathVariable Long id, HttpServletRequest request) {
+    @PostMapping("/{id}/publish")
+    @Operation(summary = "发布文章", description = "将草稿文章发布，需要登录且是文章作者")
+    public Result<Void> publishArticle(@PathVariable Long id, 
+                                     HttpServletRequest httpRequest) {
         try {
-            Long userId = getUserIdFromRequest(request);
+            Long userId = getUserIdFromRequest(httpRequest);
+            if (userId == null) {
+                return Result.unauthorized("未登录");
+            }
+
+            // 检查文章是否存在且是否为作者
+            Article existingArticle = articleService.getById(id);
+            if (existingArticle == null) {
+                return Result.notFound("文章不存在");
+            }
+            if (!existingArticle.getAuthorId().equals(userId)) {
+                return Result.forbidden("无权限发布此文章");
+            }
+
+            articleService.publishArticle(id);
+            return Result.success();
+        } catch (Exception e) {
+            log.error("发布文章失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/like")
+    @Operation(summary = "点赞文章", description = "给文章点赞，需要登录")
+    public Result<Void> likeArticle(@PathVariable Long id, 
+                                  HttpServletRequest httpRequest) {
+        try {
+            Long userId = getUserIdFromRequest(httpRequest);
             if (userId == null) {
                 return Result.unauthorized("未登录");
             }
@@ -143,10 +187,11 @@ public class ArticleController {
     }
 
     @DeleteMapping("/{id}/like")
-    @Operation(summary = "取消点赞", description = "取消文章点赞")
-    public Result<Void> unlikeArticle(@PathVariable Long id, HttpServletRequest request) {
+    @Operation(summary = "取消点赞", description = "取消文章点赞，需要登录")
+    public Result<Void> unlikeArticle(@PathVariable Long id, 
+                                    HttpServletRequest httpRequest) {
         try {
-            Long userId = getUserIdFromRequest(request);
+            Long userId = getUserIdFromRequest(httpRequest);
             if (userId == null) {
                 return Result.unauthorized("未登录");
             }
@@ -160,7 +205,7 @@ public class ArticleController {
     }
 
     @GetMapping("/hot")
-    @Operation(summary = "获取热门文章", description = "获取热门文章列表")
+    @Operation(summary = "获取热门文章", description = "根据阅读量获取热门文章")
     public Result<List<Article>> getHotArticles(@RequestParam(defaultValue = "10") Integer limit) {
         try {
             List<Article> articles = articleService.getHotArticles(limit);
@@ -171,11 +216,23 @@ public class ArticleController {
         }
     }
 
+    @GetMapping("/recommend")
+    @Operation(summary = "获取推荐文章", description = "获取推荐的文章")
+    public Result<List<Article>> getRecommendArticles(@RequestParam(defaultValue = "10") Integer limit) {
+        try {
+            List<Article> articles = articleService.getRecommendArticles(limit);
+            return Result.success(articles);
+        } catch (Exception e) {
+            log.error("获取推荐文章失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
     @GetMapping("/search")
     @Operation(summary = "搜索文章", description = "根据关键词搜索文章")
     public Result<IPage<Article>> searchArticles(@RequestParam String keyword,
-                                                @RequestParam(defaultValue = "1") Integer page,
-                                                @RequestParam(defaultValue = "10") Integer size) {
+                                               @RequestParam(defaultValue = "1") Integer page,
+                                               @RequestParam(defaultValue = "10") Integer size) {
         try {
             IPage<Article> result = articleService.searchArticles(keyword, page, size);
             return Result.success(result);
