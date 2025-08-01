@@ -1,38 +1,66 @@
 <template>
   <div class="write-article">
-    <div class="container">
-      <div class="write-container">
-        <el-form
-          ref="articleFormRef"
-          :model="articleForm"
-          :rules="articleRules"
-          label-width="80px"
-        >
-          <el-form-item label="标题" prop="title">
-            <el-input
-              v-model="articleForm.title"
-              placeholder="请输入文章标题"
-              maxlength="100"
-              show-word-limit
-            />
-          </el-form-item>
-          
-          <el-form-item label="摘要" prop="summary">
-            <el-input
-              v-model="articleForm.summary"
-              type="textarea"
-              :rows="3"
-              placeholder="请输入文章摘要"
-              maxlength="200"
-              show-word-limit
-            />
-          </el-form-item>
-          
-          <el-form-item label="分类" prop="categoryId">
+    <!-- 页面头部 -->
+    <div class="write-header">
+      <div class="header-content">
+        <h1 class="page-title">
+          <i class="el-icon-edit"></i>
+          {{ isEdit ? '编辑文章' : '写文章' }}
+        </h1>
+        <div class="header-actions">
+          <el-button @click="saveDraft" :loading="saving" type="info" plain>
+            <i class="el-icon-document"></i>
+            保存草稿
+          </el-button>
+          <el-button @click="publishArticle" :loading="publishing" type="primary">
+            <i class="el-icon-upload"></i>
+            {{ isEdit ? '更新文章' : '发布文章' }}
+          </el-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文章编辑表单 -->
+    <div class="write-content">
+      <el-form :model="articleForm" :rules="rules" ref="articleFormRef" label-position="top">
+        <!-- 文章标题 -->
+        <el-form-item label="文章标题" prop="title">
+          <el-input
+            v-model="articleForm.title"
+            placeholder="请输入文章标题"
+            size="large"
+            maxlength="100"
+            show-word-limit
+            clearable
+          >
+            <template #prefix>
+              <i class="el-icon-edit-outline"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <!-- 文章摘要 -->
+        <el-form-item label="文章摘要" prop="summary">
+          <el-input
+            v-model="articleForm.summary"
+            type="textarea"
+            placeholder="请输入文章摘要（可选）"
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+            resize="none"
+          />
+        </el-form-item>
+
+        <!-- 文章分类和标签 -->
+        <div class="form-row">
+          <el-form-item label="文章分类" prop="categoryId" class="form-col">
             <el-select
               v-model="articleForm.categoryId"
               placeholder="请选择分类"
-              style="width: 200px"
+              size="large"
+              style="width: 100%"
+              clearable
             >
               <el-option
                 v-for="category in categories"
@@ -42,195 +70,172 @@
               />
             </el-select>
           </el-form-item>
-          
-          <el-form-item label="标签">
+
+          <el-form-item label="文章标签" class="form-col">
             <el-select
-              v-model="articleForm.tagIds"
+              v-model="articleForm.tags"
               multiple
-              placeholder="请选择标签"
-              style="width: 300px"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="请选择或输入标签"
+              size="large"
+              style="width: 100%"
             >
               <el-option
-                v-for="tag in tags"
-                :key="tag.id"
-                :label="tag.name"
-                :value="tag.id"
+                v-for="tag in popularTags"
+                :key="tag"
+                :label="tag"
+                :value="tag"
               />
             </el-select>
           </el-form-item>
-          
-          <el-form-item label="封面">
-            <el-input
-              v-model="articleForm.cover"
-              placeholder="请输入封面图片URL（可选）"
-            />
-          </el-form-item>
-          
-          <el-form-item label="内容" prop="content">
-            <div class="editor-container">
-              <div class="editor-toolbar">
-                <el-button-group>
-                  <el-button size="small" @click="insertMarkdown('**', '**')">粗体</el-button>
-                  <el-button size="small" @click="insertMarkdown('*', '*')">斜体</el-button>
-                  <el-button size="small" @click="insertMarkdown('`', '`')">代码</el-button>
-                  <el-button size="small" @click="insertMarkdown('\n```\n', '\n```\n')">代码块</el-button>
-                  <el-button size="small" @click="insertMarkdown('[', '](url)')">链接</el-button>
-                  <el-button size="small" @click="insertMarkdown('![', '](url)')">图片</el-button>
-                </el-button-group>
+        </div>
+
+        <!-- 文章内容编辑器 -->
+        <el-form-item label="文章内容" prop="content">
+          <div class="editor-container">
+            <div class="editor-toolbar">
+              <el-button-group>
+                <el-button
+                  :type="editorMode === 'edit' ? 'primary' : 'default'"
+                  @click="editorMode = 'edit'"
+                  size="small"
+                >
+                  <i class="el-icon-edit"></i>
+                  编辑
+                </el-button>
+                <el-button
+                  :type="editorMode === 'preview' ? 'primary' : 'default'"
+                  @click="editorMode = 'preview'"
+                  size="small"
+                >
+                  <i class="el-icon-view"></i>
+                  预览
+                </el-button>
+                <el-button
+                  :type="editorMode === 'split' ? 'primary' : 'default'"
+                  @click="editorMode = 'split'"
+                  size="small"
+                >
+                  <i class="el-icon-s-grid"></i>
+                  分屏
+                </el-button>
+              </el-button-group>
+            </div>
+
+            <div class="editor-content" :class="`editor-${editorMode}`">
+              <!-- 编辑区域 -->
+              <div v-show="editorMode === 'edit' || editorMode === 'split'" class="editor-input">
+                <el-input
+                  v-model="articleForm.content"
+                  type="textarea"
+                  placeholder="请输入文章内容，支持 Markdown 语法"
+                  :rows="20"
+                  resize="none"
+                  @input="handleContentChange"
+                />
               </div>
-              
-              <div class="editor-content">
-                <div class="editor-input">
-                  <el-input
-                    ref="contentInputRef"
-                    v-model="articleForm.content"
-                    type="textarea"
-                    :rows="20"
-                    placeholder="请输入文章内容（支持Markdown语法）"
-                    @input="updatePreview"
-                  />
-                </div>
-                
-                <div class="editor-preview">
-                  <div class="preview-header">预览</div>
-                  <div v-html="previewContent" class="markdown-body"></div>
-                </div>
+
+              <!-- 预览区域 -->
+              <div v-show="editorMode === 'preview' || editorMode === 'split'" class="editor-preview">
+                <div class="preview-content" v-html="previewContent"></div>
               </div>
             </div>
-          </el-form-item>
-          
-          <el-form-item>
-            <div class="form-actions">
-              <el-button @click="saveDraft" :loading="draftLoading">保存草稿</el-button>
-              <el-button type="primary" @click="publishArticle" :loading="publishLoading">
-                发布文章
-              </el-button>
-            </div>
-          </el-form-item>
-        </el-form>
-      </div>
+          </div>
+        </el-form-item>
+      </el-form>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { articleApi } from '../api/article'
-import { categoryApi } from '../api/category'
-import { tagApi } from '../api/tag'
-import { useUserStore } from '../stores/user'
-import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { marked } from 'marked'
+import { articleApi } from '@/api/article'
+import { categoryApi } from '@/api/category'
+import { tagApi } from '@/api/tag'
 
 const router = useRouter()
-const userStore = useUserStore()
-const articleFormRef = ref()
-const contentInputRef = ref()
+const route = useRoute()
 
-const draftLoading = ref(false)
-const publishLoading = ref(false)
+// 响应式数据
+const articleFormRef = ref(null)
+const saving = ref(false)
+const publishing = ref(false)
+const editorMode = ref('edit') // edit, preview, split
 const categories = ref([])
-const tags = ref([])
+const popularTags = ref(['Vue', 'JavaScript', 'CSS', 'HTML', 'Node.js', 'React', 'TypeScript', '前端', '后端', '全栈'])
+
+// 判断是否为编辑模式
+const isEdit = computed(() => !!route.params.id)
 
 // 文章表单数据
 const articleForm = reactive({
   title: '',
   summary: '',
   content: '',
-  cover: '',
   categoryId: null,
-  tagIds: []
+  tags: []
 })
 
 // 表单验证规则
-const articleRules = {
+const rules = {
   title: [
     { required: true, message: '请输入文章标题', trigger: 'blur' },
-    { min: 5, max: 100, message: '标题长度在 5 到 100 个字符', trigger: 'blur' }
-  ],
-  summary: [
-    { required: true, message: '请输入文章摘要', trigger: 'blur' },
-    { min: 10, max: 200, message: '摘要长度在 10 到 200 个字符', trigger: 'blur' }
-  ],
-  categoryId: [
-    { required: true, message: '请选择分类', trigger: 'change' }
+    { min: 1, max: 100, message: '标题长度在 1 到 100 个字符', trigger: 'blur' }
   ],
   content: [
     { required: true, message: '请输入文章内容', trigger: 'blur' },
-    { min: 50, message: '内容至少50个字符', trigger: 'blur' }
+    { min: 10, message: '文章内容至少需要 10 个字符', trigger: 'blur' }
+  ],
+  categoryId: [
+    { required: true, message: '请选择文章分类', trigger: 'change' }
   ]
 }
 
-// Markdown渲染器
-const md = new MarkdownIt({
-  highlight: function (str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(str, { language: lang }).value
-      } catch (__) {}
-    }
-    return ''
-  }
-})
-
 // 预览内容
 const previewContent = computed(() => {
-  if (!articleForm.content) return '<p>在左侧输入内容，这里将显示预览效果</p>'
-  return md.render(articleForm.content)
+  if (!articleForm.content) return '<p class="empty-preview">开始输入内容查看预览...</p>'
+  return marked(articleForm.content)
 })
 
 // 获取分类列表
-const getCategories = async () => {
+const fetchCategories = async () => {
   try {
-    const response = await categoryApi.getCategoryList()
-    if (response.code === 200) {
-      categories.value = response.data
-    }
+    const response = await categoryApi.getCategories()
+    categories.value = response.data
   } catch (error) {
-    console.error('获取分类失败:', error)
+    console.error('获取分类列表失败:', error)
   }
 }
 
-// 获取标签列表
-const getTags = async () => {
+// 获取文章详情（编辑模式）
+const fetchArticleDetail = async () => {
+  if (!isEdit.value) return
+  
   try {
-    const response = await tagApi.getTagList()
-    if (response.code === 200) {
-      tags.value = response.data
-    }
+    const response = await articleApi.getArticleDetail(route.params.id)
+    const article = response.data
+    
+    // 填充表单
+    articleForm.title = article.title
+    articleForm.summary = article.summary || ''
+    articleForm.content = article.content
+    articleForm.categoryId = article.categoryId
+    articleForm.tags = article.tags?.map(tag => tag.name) || []
   } catch (error) {
-    console.error('获取标签失败:', error)
+    console.error('获取文章详情失败:', error)
+    ElMessage.error('获取文章信息失败')
+    router.push('/')
   }
 }
 
-// 插入Markdown语法
-const insertMarkdown = (before, after) => {
-  const textarea = contentInputRef.value?.textarea
-  if (!textarea) return
-  
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const selectedText = articleForm.content.substring(start, end)
-  
-  const newText = before + selectedText + after
-  articleForm.content = articleForm.content.substring(0, start) + newText + articleForm.content.substring(end)
-  
-  // 设置光标位置
-  setTimeout(() => {
-    textarea.focus()
-    textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length)
-  }, 0)
-}
-
-// 更新预览（防抖）
-let previewTimer = null
-const updatePreview = () => {
-  clearTimeout(previewTimer)
-  previewTimer = setTimeout(() => {
-    // 预览内容会自动更新，因为使用了computed
-  }, 300)
+// 处理内容变化
+const handleContentChange = () => {
+  // 可以在这里添加自动保存逻辑
 }
 
 // 保存草稿
@@ -238,25 +243,28 @@ const saveDraft = async () => {
   if (!articleFormRef.value) return
   
   try {
-    const valid = await articleFormRef.value.validate()
-    if (!valid) return
+    await articleFormRef.value.validate()
+    saving.value = true
     
-    draftLoading.value = true
-    const response = await articleApi.createArticle({
+    const articleData = {
       ...articleForm,
-      status: 0 // 草稿状态
-    })
+      status: 'DRAFT'
+    }
     
-    if (response.code === 200) {
+    if (isEdit.value) {
+      await articleApi.updateArticle(route.params.id, articleData)
       ElMessage.success('草稿保存成功')
-      router.push('/profile')
     } else {
-      ElMessage.error(response.message || '保存失败')
+      const response = await articleApi.createArticle(articleData)
+      ElMessage.success('草稿保存成功')
+      // 跳转到编辑页面
+      router.replace(`/edit/${response.data.id}`)
     }
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('保存草稿失败:', error)
+    ElMessage.error('保存失败，请重试')
   } finally {
-    draftLoading.value = false
+    saving.value = false
   }
 }
 
@@ -265,53 +273,95 @@ const publishArticle = async () => {
   if (!articleFormRef.value) return
   
   try {
-    const valid = await articleFormRef.value.validate()
-    if (!valid) return
+    await articleFormRef.value.validate()
+    publishing.value = true
     
-    publishLoading.value = true
-    const response = await articleApi.createArticle({
+    const articleData = {
       ...articleForm,
-      status: 1 // 发布状态
-    })
-    
-    if (response.code === 200) {
-      ElMessage.success('文章发布成功')
-      router.push('/profile')
-    } else {
-      ElMessage.error(response.message || '发布失败')
+      status: 'PUBLISHED'
     }
+    
+    let articleId
+    if (isEdit.value) {
+      await articleApi.updateArticle(route.params.id, articleData)
+      articleId = route.params.id
+      ElMessage.success('文章更新成功')
+    } else {
+      const response = await articleApi.createArticle(articleData)
+      articleId = response.data.id
+      ElMessage.success('文章发布成功')
+    }
+    
+    // 跳转到文章详情页
+    router.push(`/article/${articleId}`)
   } catch (error) {
-    ElMessage.error('发布失败')
+    console.error('发布文章失败:', error)
+    ElMessage.error('发布失败，请重试')
   } finally {
-    publishLoading.value = false
+    publishing.value = false
   }
 }
 
-// 页面加载时获取数据
+// 组件挂载时获取数据
 onMounted(() => {
-  if (!userStore.isLoggedIn) {
-    ElMessage.warning('请先登录')
-    router.push('/login')
-    return
-  }
-  
-  getCategories()
-  getTags()
+  fetchCategories()
+  fetchArticleDetail()
 })
 </script>
 
 <style scoped>
 .write-article {
-  padding: 20px 0;
+  min-height: 100vh;
+  background: #f5f7fa;
 }
 
-.write-container {
+.write-header {
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
   max-width: 1200px;
   margin: 0 auto;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  padding: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 60px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #303133;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.write-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.form-col {
+  margin-bottom: 0;
 }
 
 .editor-container {
@@ -321,158 +371,177 @@ onMounted(() => {
 }
 
 .editor-toolbar {
-  padding: 10px;
   background: #f5f7fa;
-  border-bottom: 1px solid #dcdfe6;
+  padding: 10px 15px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .editor-content {
+  min-height: 500px;
   display: flex;
-  height: 500px;
+}
+
+.editor-edit .editor-input {
+  width: 100%;
+}
+
+.editor-preview .editor-preview {
+  width: 100%;
+}
+
+.editor-split .editor-input,
+.editor-split .editor-preview {
+  width: 50%;
 }
 
 .editor-input {
-  flex: 1;
-  border-right: 1px solid #dcdfe6;
-}
-
-.editor-input :deep(.el-textarea) {
-  height: 100%;
+  border-right: 1px solid #e4e7ed;
 }
 
 .editor-input :deep(.el-textarea__inner) {
-  height: 100%;
   border: none;
   border-radius: 0;
   resize: none;
-  font-family: 'Courier New', monospace;
+  min-height: 500px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
   line-height: 1.6;
 }
 
 .editor-preview {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-header {
-  padding: 10px 15px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #dcdfe6;
-  font-size: 14px;
-  color: #666;
-}
-
-.markdown-body {
-  flex: 1;
-  padding: 15px;
+  background: white;
   overflow-y: auto;
+}
+
+.preview-content {
+  padding: 20px;
   line-height: 1.8;
   color: #333;
 }
 
-.form-actions {
-  display: flex;
-  gap: 15px;
-}
-
-/* Markdown预览样式 */
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
+.preview-content :deep(h1),
+.preview-content :deep(h2),
+.preview-content :deep(h3),
+.preview-content :deep(h4),
+.preview-content :deep(h5),
+.preview-content :deep(h6) {
   margin: 20px 0 10px 0;
   font-weight: 600;
-  color: #333;
+  color: #2c3e50;
 }
 
-.markdown-body h1 {
-  font-size: 20px;
+.preview-content :deep(h1) {
+  font-size: 2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 10px;
 }
 
-.markdown-body h2 {
-  font-size: 18px;
+.preview-content :deep(h2) {
+  font-size: 1.5rem;
 }
 
-.markdown-body h3 {
-  font-size: 16px;
+.preview-content :deep(h3) {
+  font-size: 1.25rem;
 }
 
-.markdown-body p {
-  margin: 10px 0;
+.preview-content :deep(p) {
+  margin: 15px 0;
 }
 
-.markdown-body code {
-  background: #f6f8fa;
-  padding: 2px 4px;
+.preview-content :deep(code) {
+  background: #f8f8f8;
+  padding: 2px 6px;
   border-radius: 3px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  color: #e74c3c;
 }
 
-.markdown-body pre {
-  background: #f6f8fa;
-  padding: 10px;
-  border-radius: 4px;
+.preview-content :deep(pre) {
+  background: #f8f8f8;
+  padding: 15px;
+  border-radius: 5px;
   overflow-x: auto;
-  margin: 10px 0;
+  margin: 20px 0;
 }
 
-.markdown-body pre code {
+.preview-content :deep(pre code) {
   background: none;
   padding: 0;
+  color: inherit;
 }
 
-.markdown-body blockquote {
-  border-left: 3px solid #dfe2e5;
-  padding-left: 10px;
-  margin: 10px 0;
+.preview-content :deep(blockquote) {
+  border-left: 4px solid #ddd;
+  padding-left: 15px;
+  margin: 20px 0;
   color: #666;
+  font-style: italic;
 }
 
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 20px;
-  margin: 10px 0;
+.preview-content :deep(ul),
+.preview-content :deep(ol) {
+  padding-left: 30px;
+  margin: 15px 0;
 }
 
-.markdown-body li {
-  margin: 3px 0;
+.preview-content :deep(li) {
+  margin: 5px 0;
 }
 
-.markdown-body img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-  margin: 10px 0;
+.preview-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
 }
 
-/* 响应式设计 */
+.preview-content :deep(th),
+.preview-content :deep(td) {
+  border: 1px solid #ddd;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.preview-content :deep(th) {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.empty-preview {
+  color: #999;
+  text-align: center;
+  padding: 50px 20px;
+  font-style: italic;
+}
+
 @media (max-width: 768px) {
-  .write-container {
-    padding: 20px 15px;
-    margin: 0 15px;
-  }
-  
-  .editor-content {
+  .header-content {
     flex-direction: column;
     height: auto;
+    padding: 15px 0;
+    gap: 15px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .editor-split .editor-input,
+  .editor-split .editor-preview {
+    width: 100%;
+  }
+  
+  .editor-split .editor-content {
+    flex-direction: column;
   }
   
   .editor-input {
     border-right: none;
-    border-bottom: 1px solid #dcdfe6;
-  }
-  
-  .editor-input :deep(.el-textarea__inner) {
-    height: 300px;
-  }
-  
-  .editor-preview {
-    height: 300px;
+    border-bottom: 1px solid #e4e7ed;
   }
 }
 </style>
