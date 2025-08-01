@@ -1,8 +1,6 @@
 package com.blog.utils;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,8 +8,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * JWT工具类
@@ -22,127 +18,110 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret:mySecretKey}")
+    @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration:86400}")
+    @Value("${jwt.expiration}")
     private Long expiration;
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
-    }
 
     /**
      * 生成JWT令牌
-     * 
-     * @param username 用户名
-     * @param userId 用户ID
-     * @return JWT令牌
      */
     public String generateToken(String username, Long userId) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("username", username);
-        claims.put("userId", userId);
-        return createToken(claims, username);
-    }
-
-    /**
-     * 创建令牌
-     * 
-     * @param claims 声明
-     * @param subject 主题
-     * @return JWT令牌
-     */
-    private String createToken(Map<String, Object> claims, String subject) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration * 1000);
+        Date expiryDate = new Date(now.getTime() + expiration);
+
+        SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
 
         return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(subject)
+                .setSubject(username)
+                .claim("userId", userId)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .signWith(key, SignatureAlgorithm.HS512)
                 .compact();
     }
 
     /**
-     * 从令牌中获取用户名
-     * 
-     * @param token JWT令牌
-     * @return 用户名
+     * 从JWT令牌中获取用户名
      */
     public String getUsernameFromToken(String token) {
         try {
-            Claims claims = getClaimsFromToken(token);
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
             return claims.getSubject();
         } catch (Exception e) {
-            log.error("获取用户名失败", e);
+            log.error("从JWT令牌中获取用户名失败", e);
             return null;
         }
     }
 
     /**
-     * 从令牌中获取用户ID
-     * 
-     * @param token JWT令牌
-     * @return 用户ID
+     * 从JWT令牌中获取用户ID
      */
     public Long getUserIdFromToken(String token) {
         try {
-            Claims claims = getClaimsFromToken(token);
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
             return claims.get("userId", Long.class);
         } catch (Exception e) {
-            log.error("获取用户ID失败", e);
+            log.error("从JWT令牌中获取用户ID失败", e);
             return null;
         }
     }
 
     /**
-     * 从令牌中获取声明
-     * 
-     * @param token JWT令牌
-     * @return 声明
+     * 验证JWT令牌
      */
-    private Claims getClaimsFromToken(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+    public boolean validateToken(String token) {
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
+            Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token);
+            return true;
+        } catch (ExpiredJwtException e) {
+            log.error("JWT令牌已过期", e);
+        } catch (UnsupportedJwtException e) {
+            log.error("不支持的JWT令牌", e);
+        } catch (MalformedJwtException e) {
+            log.error("JWT令牌格式错误", e);
+        } catch (SecurityException e) {
+            log.error("JWT令牌安全异常", e);
+        } catch (IllegalArgumentException e) {
+            log.error("JWT令牌参数异常", e);
+        }
+        return false;
     }
 
     /**
-     * 检查令牌是否过期
-     * 
-     * @param token JWT令牌
-     * @return 是否过期
+     * 检查JWT令牌是否过期
      */
-    public Boolean isTokenExpired(String token) {
+    public boolean isTokenExpired(String token) {
         try {
-            Claims claims = getClaimsFromToken(token);
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+            
             Date expiration = claims.getExpiration();
             return expiration.before(new Date());
         } catch (Exception e) {
-            log.error("检查令牌过期失败", e);
+            log.error("检查JWT令牌过期状态失败", e);
             return true;
-        }
-    }
-
-    /**
-     * 验证令牌
-     * 
-     * @param token JWT令牌
-     * @param username 用户名
-     * @return 是否有效
-     */
-    public Boolean validateToken(String token, String username) {
-        try {
-            String tokenUsername = getUsernameFromToken(token);
-            return (username.equals(tokenUsername) && !isTokenExpired(token));
-        } catch (Exception e) {
-            log.error("验证令牌失败", e);
-            return false;
         }
     }
 }
