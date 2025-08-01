@@ -1,111 +1,111 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { userApi } from '../api/user'
+import { userApi } from '@/api/user'
 import { ElMessage } from 'element-plus'
-import router from '../router'
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref(null)
+  // 状态
   const token = ref(localStorage.getItem('token') || '')
-  
+  const userInfo = ref(JSON.parse(localStorage.getItem('userInfo') || 'null'))
+
+  // 计算属性
   const isLoggedIn = computed(() => !!token.value)
-  
-  // 登录
-  const login = async (username, password) => {
+  const username = computed(() => userInfo.value?.username || '')
+  const nickname = computed(() => userInfo.value?.nickname || '')
+  const avatar = computed(() => userInfo.value?.avatar || '')
+
+  // 方法
+  const login = async (loginData) => {
     try {
-      const response = await userApi.login({ username, password })
-      if (response.code === 200) {
-        token.value = response.data
-        localStorage.setItem('token', response.data)
-        await getUserInfo()
-        ElMessage.success('登录成功')
-        router.push('/')
-        return true
-      } else {
-        ElMessage.error(response.message || '登录失败')
-        return false
-      }
+      const response = await userApi.login(loginData)
+      const { data } = response
+      
+      // 保存token和用户信息
+      token.value = data
+      localStorage.setItem('token', data)
+      
+      // 获取用户信息
+      await getUserInfo()
+      
+      ElMessage.success('登录成功')
+      return true
     } catch (error) {
-      ElMessage.error('登录失败，请检查网络连接')
+      ElMessage.error(error.message || '登录失败')
       return false
     }
   }
-  
-  // 注册
-  const register = async (userData) => {
+
+  const register = async (registerData) => {
     try {
-      const response = await userApi.register(userData)
-      if (response.code === 200) {
-        ElMessage.success('注册成功，请登录')
-        router.push('/login')
-        return true
-      } else {
-        ElMessage.error(response.message || '注册失败')
-        return false
-      }
+      await userApi.register(registerData)
+      ElMessage.success('注册成功，请登录')
+      return true
     } catch (error) {
-      ElMessage.error('注册失败，请检查网络连接')
+      ElMessage.error(error.message || '注册失败')
       return false
     }
   }
-  
-  // 获取用户信息
+
   const getUserInfo = async () => {
     try {
       const response = await userApi.getUserInfo()
-      if (response.code === 200) {
-        user.value = response.data
-        return true
-      } else {
-        logout()
-        return false
-      }
+      const { data } = response
+      
+      userInfo.value = data
+      localStorage.setItem('userInfo', JSON.stringify(data))
     } catch (error) {
-      logout()
-      return false
+      console.error('获取用户信息失败:', error)
     }
   }
-  
-  // 更新用户信息
+
   const updateUserInfo = async (userData) => {
     try {
-      const response = await userApi.updateUserInfo(userData)
-      if (response.code === 200) {
-        await getUserInfo()
-        ElMessage.success('更新成功')
-        return true
-      } else {
-        ElMessage.error(response.message || '更新失败')
-        return false
-      }
+      await userApi.updateUserInfo(userData)
+      await getUserInfo() // 重新获取用户信息
+      ElMessage.success('更新成功')
+      return true
     } catch (error) {
-      ElMessage.error('更新失败，请检查网络连接')
+      ElMessage.error(error.message || '更新失败')
       return false
     }
   }
-  
-  // 退出登录
+
+  const changePassword = async (passwordData) => {
+    try {
+      await userApi.changePassword(passwordData)
+      ElMessage.success('密码修改成功')
+      return true
+    } catch (error) {
+      ElMessage.error(error.message || '密码修改失败')
+      return false
+    }
+  }
+
   const logout = () => {
-    user.value = null
     token.value = ''
+    userInfo.value = null
     localStorage.removeItem('token')
-    router.push('/login')
+    localStorage.removeItem('userInfo')
     ElMessage.success('已退出登录')
   }
-  
-  // 初始化时获取用户信息
-  if (token.value) {
-    getUserInfo()
-  }
-  
+
   return {
-    user,
+    // 状态
     token,
+    userInfo,
+    
+    // 计算属性
     isLoggedIn,
+    username,
+    nickname,
+    avatar,
+    
+    // 方法
     login,
     register,
     getUserInfo,
     updateUserInfo,
+    changePassword,
     logout
   }
 })
