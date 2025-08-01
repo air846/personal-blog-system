@@ -1,43 +1,39 @@
-# 服务器配置
 server:
   port: 8080
   servlet:
-    context-path: /
+    context-path: /api
 
-# 数据源配置
 spring:
+  application:
+    name: blog-system
+  
+  # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/blog_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 123456
-  
-  # Redis配置
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: 
-      database: 0
-      timeout: 10000ms
-      lettuce:
-        pool:
-          max-active: 8
-          max-wait: -1ms
-          max-idle: 8
-          min-idle: 0
-  
+    
+  # Redis配置（临时禁用）
+  # data:
+  #   redis:
+  #     host: localhost
+  #     port: 6379
+  #     password: 
+  #     database: 0
+  #     timeout: 10000ms
+  #     lettuce:
+  #       pool:
+  #         max-active: 8
+  #         max-wait: -1ms
+  #         max-idle: 8
+  #         min-idle: 0
+
   # Jackson配置
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
     default-property-inclusion: non_null
-  
-  # 文件上传配置
-  servlet:
-    multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
 
 # MyBatis Plus配置
 mybatis-plus:
@@ -46,37 +42,33 @@ mybatis-plus:
     cache-enabled: false
     call-setters-on-nulls: true
     jdbc-type-for-null: 'null'
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: auto
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-    banner: false
-  mapper-locations: classpath*:/mapper/**/*.xml
-  type-aliases-package: com.blog.entity
-
+      
 # JWT配置
 jwt:
-  secret: mySecretKey123456789012345678901234567890
-  expiration: 86400000
-
-# Knife4j配置
-knife4j:
-  enable: true
-  setting:
-    language: zh-CN
-    enable-swagger-models: true
-    enable-document-manage: true
-    swagger-model-name: 实体类列表
-  basic:
-    enable: false
-
+  secret: blog-system-secret-key-2024
+  expiration: 86400000  # 24小时
+  
 # 日志配置
 logging:
   level:
     com.blog: debug
     org.springframework.security: debug
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+    console: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n'
+    
+# Knife4j配置
+knife4j:
+  enable: true
+  openapi:
+    title: 个人博客系统API文档
+    description: 基于Spring Boot的个人博客系统
+    version: 1.0.0
+    concat: blog@example.com
+  setting:
+    language: zh_cn

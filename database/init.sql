@@ -109,7 +109,7 @@ CREATE TABLE `article_like` (
 
 -- 系统配置表
 CREATE TABLE `system_config` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '配置ID',
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
   `config_key` varchar(100) NOT NULL COMMENT '配置键',
   `config_value` text COMMENT '配置值',
   `description` varchar(200) DEFAULT NULL COMMENT '配置描述',
@@ -120,33 +120,24 @@ CREATE TABLE `system_config` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置表';
 
 -- 插入初始数据
-
 -- 插入管理员用户（密码：admin123）
-INSERT INTO `user` (`username`, `password`, `email`, `nickname`, `role`) VALUES
-('admin', '$2a$10$Hm0m1d6xhQYPcJfU4sM9LeHlMVcVE/ZvK3v5VF2YoIzl9aJFtXQCW', 'admin@blog.com', '管理员', 'ADMIN');
+INSERT INTO `user` (`username`, `password`, `email`, `nickname`, `role`) VALUES 
+('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iKTnl5iHkqNjCyOdONPOjvOm3.2a', 'admin@blog.com', '管理员', 'ADMIN');
 
 -- 插入默认分类
-INSERT INTO `category` (`name`, `description`, `sort`) VALUES
-('技术分享', '技术相关的文章分享', 1),
-('生活随笔', '生活中的感悟和随笔', 2),
+INSERT INTO `category` (`name`, `description`, `sort`) VALUES 
+('技术分享', '分享技术相关的文章', 1),
+('生活随笔', '记录生活中的点点滴滴', 2),
 ('学习笔记', '学习过程中的笔记和总结', 3);
 
 -- 插入默认标签
-INSERT INTO `tag` (`name`, `color`) VALUES
-('Java', '#FF6B6B'),
-('Spring Boot', '#4ECDC4'),
-('Vue.js', '#45B7D1'),
-('MySQL', '#96CEB4'),
-('Redis', '#FFEAA7'),
-('前端', '#DDA0DD'),
-('后端', '#98D8C8'),
-('数据库', '#F7DC6F');
+INSERT INTO `tag` (`name`, `color`) VALUES 
+('Java', '#f56c6c'),
+('Spring Boot', '#67c23a'),
+('Vue', '#409eff'),
+('MySQL', '#e6a23c'),
+('Redis', '#f56c6c');
 
--- 插入系统配置
-INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
-('site_name', '个人博客系统', '网站名称'),
-('site_description', '一个基于Spring Boot + Vue.js的个人博客系统', '网站描述'),
-('site_keywords', '博客,Spring Boot,Vue.js,技术分享', '网站关键词'),
-('site_author', '博主', '网站作者'),
-('comment_audit', 'false', '评论是否需要审核：true-需要，false-不需要'),
-('allow_register', 'true', '是否允许注册：true-允许，false-不允许');
+-- 插入示例文章
+INSERT INTO `article` (`title`, `content`, `summary`, `category_id`, `author_id`, `status`, `publish_time`) VALUES 
+('欢迎使用个人博客系统', '# 欢迎使用个人博客系统\n\n这是一个基于Spring Boot + Vue 3的现代化博客系统。\n\n## 主要功能\n\n- 用户注册登录\n- 文章发布管理\n- 分类标签管理\n- 文章搜索\n- 响应式设计\n\n希望你能喜欢这个博客系统！', '欢迎使用个人博客系统，这是一个现代化的博客平台。', 1, 1, 'PUBLISHED', NOW());
