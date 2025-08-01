@@ -107,6 +107,29 @@ public class UserController {
         }
     }
 
+    @PutMapping("/password")
+    @Operation(summary = "修改密码", description = "修改当前用户密码")
+    public Result<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request,
+                                     HttpServletRequest httpRequest) {
+        try {
+            String token = getTokenFromRequest(httpRequest);
+            if (token == null) {
+                return Result.unauthorized("未登录");
+            }
+
+            Long userId = jwtUtil.getUserIdFromToken(token);
+            if (userId == null) {
+                return Result.unauthorized("令牌无效");
+            }
+
+            userService.changePassword(userId, request.getOldPassword(), request.getNewPassword());
+            return Result.success();
+        } catch (Exception e) {
+            log.error("修改密码失败", e);
+            return Result.error(e.getMessage());
+        }
+    }
+
     /**
      * 从请求中获取JWT令牌
      */
