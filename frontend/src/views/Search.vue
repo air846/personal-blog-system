@@ -1,37 +1,51 @@
 <template>
   <div class="search-page">
+    <Header />
+    
     <div class="container">
-      <div class="search-header">
-        <h2>搜索结果</h2>
-        <p v-if="keyword">关键词："{{ keyword }}"</p>
-        <p v-if="total > 0">找到 {{ total }} 篇相关文章</p>
-      </div>
-      
-      <div v-loading="loading" class="search-results">
-        <div v-if="articles.length === 0 && !loading" class="empty-state">
-          <el-empty description="没有找到相关文章" />
-          <el-button type="primary" @click="$router.push('/')">返回首页</el-button>
+      <div class="search-content">
+        <div class="search-header">
+          <h2>搜索结果</h2>
+          <p v-if="keyword">关键词：{{ keyword }}</p>
+          <p v-if="total > 0">共找到 {{ total }} 篇文章</p>
         </div>
         
-        <div v-else class="article-list">
-          <ArticleCard
+        <div v-if="loading" class="loading">
+          <el-skeleton :rows="3" animated />
+        </div>
+        
+        <div v-else-if="articles.length === 0" class="empty">
+          <el-empty description="没有找到相关文章" />
+        </div>
+        
+        <div v-else class="search-results">
+          <div
             v-for="article in articles"
             :key="article.id"
-            :article="article"
+            class="search-item"
             @click="viewArticle(article.id)"
-          />
+          >
+            <h3 class="article-title">{{ article.title }}</h3>
+            <p class="article-summary">{{ article.summary || article.content.substring(0, 200) }}...</p>
+            <div class="article-meta">
+              <span class="author">{{ article.authorName }}</span>
+              <span class="date">{{ formatDate(article.createTime) }}</span>
+              <span class="views">{{ article.viewCount }} 阅读</span>
+              <span class="likes">{{ article.likeCount }} 点赞</span>
+            </div>
+          </div>
         </div>
         
         <!-- 分页 -->
-        <div v-if="total > pageSize" class="pagination">
+        <div class="pagination" v-if="total > 0">
           <el-pagination
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
-            :total="total"
             :page-sizes="[10, 20, 50]"
+            :total="total"
             layout="total, sizes, prev, pager, next, jumper"
-            @size-change="searchArticles"
-            @current-change="searchArticles"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
           />
         </div>
       </div>
@@ -40,21 +54,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { articleApi } from '../api/article'
-import ArticleCard from '../components/ArticleCard.vue'
-import { ElMessage } from 'element-plus'
+import { articleApi } from '@/api/article'
+import Header from '@/components/Header.vue'
 
 const route = useRoute()
 const router = useRouter()
 
+// 响应式数据
 const loading = ref(false)
 const articles = ref([])
-const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const keyword = ref('')
+const total = ref(0)
+
+// 计算属性
+const keyword = computed(() => route.query.keyword || '')
 
 // 搜索文章
 const searchArticles = async () => {
@@ -62,106 +78,154 @@ const searchArticles = async () => {
   
   loading.value = true
   try {
-    const response = await articleApi.searchArticles({
-      keyword: keyword.value,
-      page: currentPage.value,
-      size: pageSize.value
-    })
-    
-    if (response.code === 200) {
-      articles.value = response.data.records || []
-      total.value = response.data.total || 0
-    } else {
-      ElMessage.error(response.message || '搜索失败')
-    }
+    const response = await articleApi.searchArticles(
+      keyword.value,
+      currentPage.value,
+      pageSize.value
+    )
+    articles.value = response.data.records
+    total.value = response.data.total
   } catch (error) {
-    ElMessage.error('搜索失败')
+    console.error('搜索失败:', error)
   } finally {
     loading.value = false
   }
 }
 
-// 查看文章详情
+// 查看文章
 const viewArticle = (id) => {
   router.push(`/article/${id}`)
 }
 
-// 监听路由参数变化
-watch(
-  () => route.query.q,
-  (newKeyword) => {
-    if (newKeyword) {
-      keyword.value = newKeyword
-      currentPage.value = 1
-      searchArticles()
-    }
-  },
-  { immediate: true }
-)
+// 分页处理
+const handleSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+  searchArticles()
+}
 
-// 页面加载时执行搜索
+const handleCurrentChange = (page) => {
+  currentPage.value = page
+  searchArticles()
+}
+
+// 格式化日期
+const formatDate = (dateString) => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN')
+}
+
+// 监听路由变化
+watch(() => route.query.keyword, () => {
+  currentPage.value = 1
+  searchArticles()
+})
+
+// 组件挂载时搜索
 onMounted(() => {
-  keyword.value = route.query.q || ''
-  if (keyword.value) {
-    searchArticles()
-  }
+  searchArticles()
 })
 </script>
 
 <style scoped>
 .search-page {
-  padding: 20px 0;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.search-content {
+  background: white;
+  border-radius: 8px;
+  padding: 30px;
+  margin: 20px 0;
 }
 
 .search-header {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  margin-bottom: 20px;
-  text-align: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .search-header h2 {
   margin: 0 0 10px 0;
+  font-size: 24px;
   color: #333;
 }
 
 .search-header p {
   margin: 5px 0;
   color: #666;
+  font-size: 14px;
 }
 
 .search-results {
-  min-height: 400px;
+  margin-bottom: 30px;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 60px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+.search-item {
+  padding: 20px 0;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
-.article-list {
-  display: grid;
-  gap: 20px;
+.search-item:hover {
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.search-item:last-child {
+  border-bottom: none;
+}
+
+.article-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+
+.article-summary {
+  color: #666;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.article-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 14px;
+  color: #999;
 }
 
 .pagination {
-  margin-top: 30px;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
 }
 
-/* 响应式设计 */
+.empty {
+  text-align: center;
+  padding: 40px;
+}
+
+.loading {
+  padding: 20px;
+}
+
 @media (max-width: 768px) {
-  .search-header {
-    padding: 20px;
-  }
-  
-  .empty-state {
-    padding: 40px 20px;
+  .article-meta {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 }
 </style>
