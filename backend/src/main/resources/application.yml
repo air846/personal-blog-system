@@ -5,43 +5,57 @@ server:
 
 spring:
   application:
-    name: blog-system
+    name: personal-blog-backend
   
-  # 数据库配置
+  # 数据源配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/blog_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/personal_blog?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 123456
     
-  # Redis配置（临时禁用）
-  # data:
-  #   redis:
-  #     host: localhost
-  #     port: 6379
-  #     password: 
-  #     database: 0
-  #     timeout: 10000ms
-  #     lettuce:
-  #       pool:
-  #         max-active: 8
-  #         max-wait: -1ms
-  #         max-idle: 8
-  #         min-idle: 0
-
-  # Jackson配置
-  jackson:
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: GMT+8
-    default-property-inclusion: non_null
-
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+        
+  # Redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+          
+  # 缓存配置
+  cache:
+    type: redis
+    redis:
+      time-to-live: 600000
+      
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+      
 # MyBatis Plus配置
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    cache-enabled: false
-    call-setters-on-nulls: true
-    jdbc-type-for-null: 'null'
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: auto
@@ -51,24 +65,23 @@ mybatis-plus:
       
 # JWT配置
 jwt:
-  secret: blog-system-secret-key-2024
-  expiration: 86400000  # 24小时
+  secret: mySecretKey123456789012345678901234567890
+  expiration: 86400000 # 24小时
   
 # 日志配置
 logging:
   level:
-    com.blog: debug
+    com.air846.blog: debug
     org.springframework.security: debug
   pattern:
-    console: '%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n'
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/blog.log
     
-# Knife4j配置
-knife4j:
-  enable: true
-  openapi:
-    title: 个人博客系统API文档
-    description: 基于Spring Boot的个人博客系统
-    version: 1.0.0
-    concat: blog@example.com
-  setting:
-    language: zh_cn
+# 跨域配置
+cors:
+  allowed-origins: http://localhost:3000
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
